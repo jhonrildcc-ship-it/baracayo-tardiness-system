@@ -94,7 +94,7 @@ react/cjs/react-jsx-runtime.production.js:
 <script>
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxQLbtvXb5CYoXSzA_qtOCqQbn6vo75Lha0rnfRRy4SY2viTiGajd4XW_9mLzzUfkOZGA/exec";
 
-  // 1. ADVISER LOGIC: Strict Student-Form Only Extractor
+  // 1. ADVISER LOGIC: Targeted Form Field Extractor
   let isSubmitting = false;
 
   document.addEventListener('click', function (e) {
@@ -102,99 +102,64 @@ react/cjs/react-jsx-runtime.production.js:
 
     if (btn && !isSubmitting) {
       const btnText = (btn.innerText || btn.value || '').toLowerCase();
-      
-      // 1. IGNORE ALL LOGIN/AUTH BUTTONS & FORM SUBMISSIONS
-      if (btnText.includes('login') || btnText.includes('log in') || btnText.includes('sign in') || btnText.includes('logout') || btnText.includes('log out') || btnText.includes('admin')) {
-        console.log('Action ignored: Auth or Admin interaction.');
-        return;
-      }
 
-      // 2. CHECK IF THIS BUTTON IS IN A LOGIN/AUTH CONTAINER
-      const parentForm = btn.closest('form, div');
-      if (parentForm) {
-        const hasAuthInputs = parentForm.querySelector('input[type="password"], input[name*="pass"], input[id*="pass"], input[type="email"]');
-        if (hasAuthInputs) {
-          console.log('Action ignored: Clicked inside a Login/Auth form.');
-          return;
-        }
-      }
-
-      // 3. ONLY FIRES IF BUTTON TEXT EXPLICITLY MATCHES STUDENT RECORD ACTIONS
-      if (btnText.includes('submit') || btnText.includes('record') || btnText.includes('tardy') || btnText.includes('late')) {
+      // Target buttons matching "Add to queue", "Submit", or "Record"
+      if (btnText.includes('queue') || btnText.includes('submit') || btnText.includes('record') || btnText.includes('add')) {
         
-        // Scope search ONLY to input fields near this button (or current view)
-        const allInputs = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="password"]):not([type="email"]), select, textarea'));
-        
-        let lrn = '';
-        let studentName = '';
-        let section = '';
-        let reason = '';
+        // Ensure button is not part of a login/auth form
+        if (btnText.includes('login') || btnText.includes('sign in')) return;
 
-        allInputs.forEach(function(input) {
-          let val = '';
-          if (input.tagName === 'SELECT') {
-            val = input.options[input.selectedIndex] ? input.options[input.selectedIndex].text.trim() : '';
-          } else {
-            val = input.value ? input.value.trim() : '';
-          }
+        const inputs = Array.from(document.querySelectorAll('input:not([type="hidden"]), select, textarea'));
+        
+        let payload = {
+          date: '',
+          term: '',
+          gradeLevel: '',
+          section: '',
+          studentName: '',
+          timeOfArrival: '',
+          minutesLate: '',
+          reason: '',
+          remarks: ''
+        };
+
+        inputs.forEach(function(input) {
+          let val = input.tagName === 'SELECT' 
+            ? (input.options[input.selectedIndex] ? input.options[input.selectedIndex].text.trim() : '') 
+            : (input.value ? input.value.trim() : '');
 
           if (!val) return;
 
-          const attr = (input.name || input.id || input.placeholder || '').toLowerCase();
+          const placeholder = (input.placeholder || '').toLowerCase();
+          const name = (input.name || input.id || '').toLowerCase();
+          const labelText = input.labels && input.labels[0] ? input.labels[0].innerText.toLowerCase() : '';
+          const attr = name + ' ' + placeholder + ' ' + labelText;
 
-          // Reject values that look like usernames, passwords, or emails
-          if (attr.includes('user') || attr.includes('pass') || attr.includes('login') || attr.includes('email')) return;
-
-          if (attr.includes('lrn') || attr.includes('id')) {
-            lrn = val;
-          } else if (attr.includes('name') || attr.includes('student')) {
-            if (!val.toLowerCase().includes('term') && !val.toLowerCase().includes('select')) {
-              studentName = val;
-            }
-          } else if (attr.includes('section') || attr.includes('grade') || attr.includes('level') || attr.includes('class')) {
-            section = val;
-          } else if (attr.includes('reason') || attr.includes('remark') || input.tagName === 'SELECT') {
-            reason = val;
-          }
+          if (attr.includes('date') && !attr.includes('validate')) payload.date = val;
+          else if (attr.includes('term')) payload.term = val;
+          else if (attr.includes('grade')) payload.gradeLevel = val;
+          else if (attr.includes('section')) payload.section = val;
+          else if (attr.includes('student') || attr.includes('lrn') || placeholder.includes('name or lrn')) payload.studentName = val;
+          else if (attr.includes('time') || attr.includes('arrival')) payload.timeOfArrival = val;
+          else if (attr.includes('minute') || attr.includes('computed')) payload.minutesLate = val;
+          else if (attr.includes('reason') || input.tagName === 'SELECT') payload.reason = val;
+          else if (attr.includes('remark') || placeholder.includes('optional')) payload.remarks = val;
         });
 
-        // Positional Fallbacks — EXCLUDE login text fields!
-        const validStudentInputs = allInputs.filter(i => {
-          const attr = (i.name || i.id || i.placeholder || '').toLowerCase();
-          return i.tagName === 'INPUT' && !attr.includes('user') && !attr.includes('pass') && !attr.includes('email') && !attr.includes('login');
-        });
-
-        if (!lrn && validStudentInputs[0]) lrn = validStudentInputs[0].value.trim();
-        if (!studentName && validStudentInputs[1]) studentName = validStudentInputs[1].value.trim();
-        if (!section && validStudentInputs[2]) section = validStudentInputs[2].value.trim();
-
-        const selectEl = document.querySelector('select');
-        if (selectEl) {
-          reason = selectEl.options[selectEl.selectedIndex].text.trim();
-        }
-
-        // STRICT REQUIREMENT: MUST HAVE A STUDENT NAME TO LOG A ROW
-        // (This prevents username logins like 'fdiez123' from ever getting through!)
-        if (!studentName) {
-          console.log('Submission blocked: Student Name missing.');
+        // STRICT GUARD: Must have student info to log
+        if (!payload.studentName) {
+          console.log('Submission blocked: Student name / LRN is empty.');
           return;
         }
 
         isSubmitting = true;
         setTimeout(function() { isSubmitting = false; }, 2000);
 
-        const payload = {
-          lrn: lrn,
-          studentName: studentName,
-          section: section,
-          reason: reason || 'No reason given'
-        };
-
         const xhr = new XMLHttpRequest();
         xhr.open('POST', SCRIPT_URL, true);
         xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
         xhr.send(new URLSearchParams(payload).toString());
-        console.log('Student record submitted cleanly:', payload);
+        console.log('Successfully recorded late arrival:', payload);
       }
     }
   }, true);
