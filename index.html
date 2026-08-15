@@ -103,6 +103,13 @@ react/cjs/react-jsx-runtime.production.js:
     if (btn && !isSubmitting) {
       const btnText = (btn.innerText || btn.value || '').toLowerCase();
       
+      // 🚫 STRICT FILTER: IGNORE LOGIN, SIGN IN, OR LOGOUT CLICKS
+      if (btnText.includes('login') || btnText.includes('log in') || btnText.includes('sign in') || btnText.includes('logout') || btnText.includes('log out')) {
+        console.log('Action ignored: Login/Auth event detected.');
+        return;
+      }
+
+      // ONLY match student record submit/save buttons
       if (btnText.includes('submit') || btnText.includes('record') || btnText.includes('add') || btnText.includes('save') || btn.type === 'submit') {
         
         const allInputs = Array.from(document.querySelectorAll('input:not([type="hidden"]), select, textarea'));
@@ -124,6 +131,9 @@ react/cjs/react-jsx-runtime.production.js:
 
           const attr = (input.name || input.id || input.placeholder || '').toLowerCase();
 
+          // Skip email/password login fields completely
+          if (attr.includes('email') || attr.includes('password') || attr.includes('user')) return;
+
           if (attr.includes('lrn') || attr.includes('id')) {
             lrn = val;
           } else if (attr.includes('name') || attr.includes('student')) {
@@ -137,7 +147,12 @@ react/cjs/react-jsx-runtime.production.js:
           }
         });
 
-        const textInputs = allInputs.filter(i => i.tagName === 'INPUT' && i.type !== 'hidden');
+        // Positional Fallbacks (Text Box 1 = LRN, Text Box 2 = Name, Text Box 3 = Section)
+        const textInputs = allInputs.filter(i => {
+          const attr = (i.name || i.id || i.placeholder || '').toLowerCase();
+          return i.tagName === 'INPUT' && i.type !== 'hidden' && !attr.includes('email') && !attr.includes('password');
+        });
+
         if (!lrn && textInputs[0]) lrn = textInputs[0].value.trim();
         if (!studentName && textInputs[1]) studentName = textInputs[1].value.trim();
         if (!section && textInputs[2]) section = textInputs[2].value.trim();
@@ -147,6 +162,7 @@ react/cjs/react-jsx-runtime.production.js:
           reason = selectEl.options[selectEl.selectedIndex].text.trim();
         }
 
+        // BLOCK SUBMISSION: Must have LRN or Student Name
         if (!lrn && !studentName) {
           console.log('Submission blocked: Form fields are empty.');
           return;
