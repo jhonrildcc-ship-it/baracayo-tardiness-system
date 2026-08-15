@@ -87,222 +87,120 @@ react/cjs/react-jsx-runtime.production.js:
    * This source code is licensed under the MIT license found in the
    * LICENSE file in the root directory of this source tree.
    *)
-*/
-// ==========================================
-// CENTRAL GOOGLE SHEETS CONNECTOR (ADVISER & ADMIN)
-// ==========================================
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwxHrRcO9fbvQmcniofGLjgFxdgwCyrlXztxivVUSBfIq_Lzlb8Gqbo2fyah8eVDvPPUA/exec";
+   */
+</script>
 
-// ------------------------------------------
-// 1. ADVISER LOGIC: Auto-capture submit button clicks
-// ------------------------------------------
-document.addEventListener('click', function (e) {
-  const target = e.target;
-  const isSubmitBtn = target.tagName === 'BUTTON' || target.type === 'submit' || target.closest('button');
+<!-- CENTRAL GOOGLE SHEETS CONNECTOR -->
+<script>
+  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwxHrRcO9fbvQmcniofGLjgFxdgwCyrlXztxivVUSBfIq_Lzlb8Gqbo2fyah8eVDvPPUA/exec";
 
-  if (isSubmitBtn) {
-    setTimeout(() => {
-      const inputs = document.querySelectorAll('input, select, textarea');
-      const payload = {};
+  // 1. ADVISER LOGIC: Auto-capture submit clicks safely
+  document.addEventListener('click', function (e) {
+    const target = e.target;
+    const isSubmitBtn = target && (target.tagName === 'BUTTON' || target.type === 'submit' || target.closest('button'));
 
-      inputs.forEach(input => {
-        const value = input.value;
-        const name = (input.name || input.id || input.placeholder || '').toLowerCase();
+    if (isSubmitBtn) {
+      setTimeout(function () {
+        const inputs = document.querySelectorAll('input, select, textarea');
+        const payload = {};
 
-        if (value) {
-          if (name.includes('id')) {
-            payload.studentId = value;
-          } else if (name.includes('name') || name.includes('student')) {
-            payload.studentName = value;
-          } else if (name.includes('section') || name.includes('class')) {
-            payload.section = value;
-          } else if (name.includes('reason') || name.includes('remark')) {
-            payload.reason = value;
-          } else {
-            payload[name ? name : 'field'] = value;
+        inputs.forEach(function (input) {
+          const value = input.value;
+          const name = (input.name || input.id || input.placeholder || '').toLowerCase();
+
+          if (value) {
+            if (name.indexOf('id') !== -1) {
+              payload.studentId = value;
+            } else if (name.indexOf('name') !== -1 || name.indexOf('student') !== -1) {
+              payload.studentName = value;
+            } else if (name.indexOf('section') !== -1 || name.indexOf('class') !== -1) {
+              payload.section = value;
+            } else if (name.indexOf('reason') !== -1 || name.indexOf('remark') !== -1) {
+              payload.reason = value;
+            } else {
+              payload[name || 'field'] = value;
+            }
           }
-        }
-      });
-
-      if (Object.keys(payload).length > 0) {
-        fetch(SCRIPT_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        })
-        .then(() => console.log('Synced record to Google Sheet!'))
-        .catch(err => console.error('Sync error:', err));
-      }
-    }, 100);
-  }
-}, true);
-
-      // Send to Google Sheets if values were captured
-      if (Object.keys(payload).length > 0) {
-        fetch(SCRIPT_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        })
-        .then(() => console.log('Synced record to Google Sheet!'))
-        .catch(err => console.error('Sync error:', err));
-      }
-    }, 100);
-  }
-}, true);
-      const payload = {};
-
-      inputs.forEach(input => {
-        const value = input.value;
-        const name = (input.name || input.id || input.placeholder || '').toLowerCase();
-
-        if (value) {
-          if (name.includes('id')) payload.studentId = value;
-          else if (name.includes('name') || name.includes('student')) payload.studentName = value;
-          else if (name.includes('section') || name.includes('class')) payload.section = value;
-          else if (name.includes('reason') || name.includes('remark')) payload.reason = value;
-          else payload[name || 'field'] = value;
-        }
-      });
-
-      // Send to Google Sheets if values were captured
-      if (Object.keys(payload).length > 0) {
-        fetch(SCRIPT_URL, {
-          method: 'POST',
-          mode: 'no-cors',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        })
-        .then(() => console.log('Synced record to Google Sheet!'))
-        .catch(err => console.error('Sync error:', err));
-      }
-    }, 100);
-  }
-}, true);
-  });
-
-  // If payload is empty, try grabbing values directly from text/select inputs
-  if (Object.keys(payload).length === 0) {
-    const inputs = form.querySelectorAll('input, select, textarea');
-    inputs.forEach(input => {
-      if (input.name || input.id || input.placeholder) {
-        const key = input.name || input.id || input.placeholder;
-        payload[key] = input.value;
-      }
-    });
-  }
-
-  // Send the payload to Google Sheets in the background
-  if (Object.keys(payload).length > 0) {
-    fetch(SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    })
-    .then(() => {
-      console.log('Successfully synced late record to Google Sheets!');
-    })
-    .catch(err => console.error('Failed to sync with Google Sheets:', err));
-  }
-}, true);
-
-// ------------------------------------------
-// 2. ADMIN LOGIC: Centralized Live Progress Dashboard
-// ------------------------------------------
-function fetchAdminMasterData() {
-  const container = document.getElementById('admin-sheets-modal-body');
-  if (container) container.innerHTML = '<p style="padding: 20px; text-align: center;">Loading all section records...</p>';
-
-  fetch(SCRIPT_URL)
-    .then(response => response.json())
-    .then(data => {
-      if (!data || data.length === 0) {
-        if (container) container.innerHTML = '<p style="padding: 20px;">No records found in Google Sheet.</p>';
-        return;
-      }
-
-      // Build HTML table from spreadsheet rows
-      let tableHtml = `<table style="width:100%; border-collapse:collapse; font-family:sans-serif; text-align:left;">`;
-      
-      data.forEach((row, rowIndex) => {
-        const isHeader = rowIndex === 0;
-        const tag = isHeader ? 'th' : 'td';
-        const bg = isHeader ? '#1a73e8' : (rowIndex % 2 === 0 ? '#f8f9fa' : '#ffffff');
-        const color = isHeader ? '#ffffff' : '#333333';
-
-        tableHtml += `<tr style="background-color: ${bg}; color: ${color};">`;
-        row.forEach(cell => {
-          tableHtml += `<${tag} style="padding: 10px; border: 1px solid #ddd;">${cell}</${tag}>`;
         });
-        tableHtml += `</tr>`;
+
+        if (Object.keys(payload).length > 0) {
+          fetch(SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          })
+          .then(function () { console.log('Synced record to Google Sheet!'); })
+          .catch(function (err) { console.error('Sync error:', err); });
+        }
+      }, 100);
+    }
+  }, true);
+
+  // 2. ADMIN LOGIC: Centralized Live Dashboard
+  function fetchAdminMasterData() {
+    const container = document.getElementById('admin-sheets-modal-body');
+    if (container) container.innerHTML = '<p style="padding: 20px; text-align: center;">Loading all section records...</p>';
+
+    fetch(SCRIPT_URL)
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
+        if (!data || data.length === 0) {
+          if (container) container.innerHTML = '<p style="padding: 20px;">No records found in Google Sheet.</p>';
+          return;
+        }
+
+        let tableHtml = '<table style="width:100%; border-collapse:collapse; font-family:sans-serif; text-align:left;">';
+        data.forEach(function (row, rowIndex) {
+          const isHeader = rowIndex === 0;
+          const tag = isHeader ? 'th' : 'td';
+          const bg = isHeader ? '#1a73e8' : (rowIndex % 2 === 0 ? '#f8f9fa' : '#ffffff');
+          const color = isHeader ? '#ffffff' : '#333333';
+
+          tableHtml += '<tr style="background-color: ' + bg + '; color: ' + color + ';">';
+          row.forEach(function (cell) {
+            tableHtml += '<' + tag + ' style="padding: 10px; border: 1px solid #ddd;">' + cell + '</' + tag + '>';
+          });
+          tableHtml += '</tr>';
+        });
+        tableHtml += '</table>';
+        if (container) container.innerHTML = tableHtml;
+      })
+      .catch(function (err) {
+        console.error('Error fetching admin records:', err);
+        if (container) container.innerHTML = '<p style="padding: 20px; color: red;">Failed to load data. Check script URL & permissions.</p>';
       });
+  }
 
-      tableHtml += `</table>`;
-      if (container) container.innerHTML = tableHtml;
-    })
-    .catch(err => {
-      console.error('Error fetching admin records:', err);
-      if (container) container.innerHTML = '<p style="padding: 20px; color: red;">Failed to load data. Check script URL & permissions.</p>';
+  window.addEventListener('DOMContentLoaded', function () {
+    const adminBtn = document.createElement('button');
+    adminBtn.innerText = '📊 Central Admin View';
+    adminBtn.style.cssText = 'position: fixed; bottom: 20px; right: 20px; z-index: 99999; padding: 12px 20px; background-color: #1a73e8; color: white; border: none; border-radius: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); font-weight: bold; cursor: pointer;';
+
+    const modal = document.createElement('div');
+    modal.id = 'admin-sheets-modal';
+    modal.style.cssText = 'display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 100000; justify-content: center; align-items: center;';
+
+    modal.innerHTML = '<div style="background: white; width: 90%; max-width: 900px; max-height: 85vh; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column;">' +
+      '<div style="padding: 15px 20px; background: #1a73e8; color: white; display: flex; justify-content: space-between; align-items: center;">' +
+        '<h3 style="margin: 0;">Live Admin View — All Section Records</h3>' +
+        '<button id="close-admin-modal" style="background: transparent; border: none; color: white; font-size: 20px; cursor: pointer;">✕</button>' +
+      '</div>' +
+      '<div id="admin-sheets-modal-body" style="padding: 20px; overflow-y: auto; flex: 1;"></div>' +
+    '</div>';
+
+    document.body.appendChild(adminBtn);
+    document.body.appendChild(modal);
+
+    adminBtn.addEventListener('click', function () {
+      modal.style.display = 'flex';
+      fetchAdminMasterData();
     });
-}
 
-// Create an Admin Overlay button floating in the bottom-right corner
-window.addEventListener('DOMContentLoaded', () => {
-  const adminBtn = document.createElement('button');
-  adminBtn.innerText = '📊 Central Admin View';
-  adminBtn.style.cssText = `
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    z-index: 99999;
-    padding: 12px 20px;
-    background-color: #1a73e8;
-    color: white;
-    border: none;
-    border-radius: 25px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-    font-weight: bold;
-    cursor: pointer;
-  `;
-
-  // Admin Modal Window
-  const modal = document.createElement('div');
-  modal.id = 'admin-sheets-modal';
-  modal.style.cssText = `
-    display: none;
-    position: fixed;
-    top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.6);
-    z-index: 100000;
-    justify-content: center;
-    align-items: center;
-  `;
-
-  modal.innerHTML = `
-    <div style="background: white; width: 90%; max-width: 900px; max-height: 85vh; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column;">
-      <div style="padding: 15px 20px; background: #1a73e8; color: white; display: flex; justify-content: space-between; align-items: center;">
-        <h3 style="margin: 0;">Live Admin View — All Section Records</h3>
-        <button id="close-admin-modal" style="background: transparent; border: none; color: white; font-size: 20px; cursor: pointer;">✕</button>
-      </div>
-      <div id="admin-sheets-modal-body" style="padding: 20px; overflow-y: auto; flex: 1;"></div>
-    </div>
-  `;
-
-  document.body.appendChild(adminBtn);
-  document.body.appendChild(modal);
-
-  adminBtn.addEventListener('click', () => {
-    modal.style.display = 'flex';
-    fetchAdminMasterData();
+    document.getElementById('close-admin-modal').addEventListener('click', function () {
+      modal.style.display = 'none';
+    });
   });
-
-  document.getElementById('close-admin-modal').addEventListener('click', () => {
-    modal.style.display = 'none';
-  });
-});
 </script>
 </body>
 </html>
