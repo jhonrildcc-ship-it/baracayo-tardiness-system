@@ -94,13 +94,13 @@ react/cjs/react-jsx-runtime.production.js:
 <script>
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwxHrRcO9fbvQmcniofGLjgFxdgwCyrlXztxivVUSBfIq_Lzlb8Gqbo2fyah8eVDvPPUA/exec";
 
- // 1. ADVISER LOGIC: Expanded Field Detection
+ // 1. ADVISER LOGIC: Multi-strategy Field Extractor
   document.addEventListener('click', function (e) {
     const target = e.target;
     const btn = target.closest('button') || target;
 
     if (btn.tagName === 'BUTTON' || btn.type === 'submit' || (btn.innerText && btn.innerText.toLowerCase().includes('submit'))) {
-      const inputs = Array.from(document.querySelectorAll('input, select, textarea'));
+      const inputs = Array.from(document.querySelectorAll('input:not([type="hidden"]), select, textarea'));
       
       let studentId = '';
       let studentName = '';
@@ -112,22 +112,18 @@ react/cjs/react-jsx-runtime.production.js:
         const attr = (input.name || input.id || input.placeholder || '').toLowerCase();
 
         if (val) {
-          if (attr.includes('id')) {
-            studentId = val;
-          } else if (attr.includes('name') || attr.includes('student')) {
-            studentName = val;
-          } else if (attr.includes('section') || attr.includes('class') || attr.includes('grade') || attr.includes('level') || attr.includes('strand')) {
-            section = val;
-          } else if (attr.includes('reason') || attr.includes('remark') || attr.includes('cause')) {
-            reason = val;
-          }
+          if (attr.includes('id')) studentId = val;
+          else if (attr.includes('name') || attr.includes('student')) studentName = val;
+          else if (attr.includes('section') || attr.includes('class') || attr.includes('grade') || attr.includes('level')) section = val;
+          else if (attr.includes('reason') || attr.includes('remark')) reason = val;
         }
       });
 
-      // Fallback: If section is still empty, grab the 3rd input on screen (standard order: ID, Name, Section, Reason)
-      if (!section && inputs[2] && inputs[2].value) {
-        section = inputs[2].value.trim();
-      }
+      // Positional Fallbacks if attribute detection missed any box
+      if (!studentId && inputs[0]) studentId = inputs[0].value.trim();
+      if (!studentName && inputs[1]) studentName = inputs[1].value.trim();
+      if (!section && inputs[2]) section = inputs[2].value.trim();
+      if (!reason && inputs[3]) reason = inputs[3].value.trim();
 
       if (studentId || studentName) {
         const data = {
@@ -141,22 +137,8 @@ react/cjs/react-jsx-runtime.production.js:
         xhr.open('POST', SCRIPT_URL, true);
         xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
         xhr.send(new URLSearchParams(data).toString());
-        console.log('Successfully recorded:', data);
+        console.log('Sending payload:', data);
       }
-    }
-  }, true);
-
-        if (Object.keys(payload).length > 0) {
-          fetch(SCRIPT_URL, {
-            method: 'POST',
-            mode: 'no-cors',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          })
-          .then(function () { console.log('Synced record to Google Sheet!'); })
-          .catch(function (err) { console.error('Sync error:', err); });
-        }
-      }, 100);
     }
   }, true);
 
