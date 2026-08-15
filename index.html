@@ -94,34 +94,57 @@ react/cjs/react-jsx-runtime.production.js:
 <script>
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwxHrRcO9fbvQmcniofGLjgFxdgwCyrlXztxivVUSBfIq_Lzlb8Gqbo2fyah8eVDvPPUA/exec";
 
-  // 1. ADVISER LOGIC: Auto-capture submit clicks safely
+ // 1. ADVISER LOGIC: Expanded Field Detection
   document.addEventListener('click', function (e) {
     const target = e.target;
-    const isSubmitBtn = target && (target.tagName === 'BUTTON' || target.type === 'submit' || target.closest('button'));
+    const btn = target.closest('button') || target;
 
-    if (isSubmitBtn) {
-      setTimeout(function () {
-        const inputs = document.querySelectorAll('input, select, textarea');
-        const payload = {};
+    if (btn.tagName === 'BUTTON' || btn.type === 'submit' || (btn.innerText && btn.innerText.toLowerCase().includes('submit'))) {
+      const inputs = Array.from(document.querySelectorAll('input, select, textarea'));
+      
+      let studentId = '';
+      let studentName = '';
+      let section = '';
+      let reason = '';
 
-        inputs.forEach(function (input) {
-          const value = input.value;
-          const name = (input.name || input.id || input.placeholder || '').toLowerCase();
+      inputs.forEach(function(input) {
+        const val = input.value ? input.value.trim() : '';
+        const attr = (input.name || input.id || input.placeholder || '').toLowerCase();
 
-          if (value) {
-            if (name.indexOf('id') !== -1) {
-              payload.studentId = value;
-            } else if (name.indexOf('name') !== -1 || name.indexOf('student') !== -1) {
-              payload.studentName = value;
-            } else if (name.indexOf('section') !== -1 || name.indexOf('class') !== -1) {
-              payload.section = value;
-            } else if (name.indexOf('reason') !== -1 || name.indexOf('remark') !== -1) {
-              payload.reason = value;
-            } else {
-              payload[name || 'field'] = value;
-            }
+        if (val) {
+          if (attr.includes('id')) {
+            studentId = val;
+          } else if (attr.includes('name') || attr.includes('student')) {
+            studentName = val;
+          } else if (attr.includes('section') || attr.includes('class') || attr.includes('grade') || attr.includes('level') || attr.includes('strand')) {
+            section = val;
+          } else if (attr.includes('reason') || attr.includes('remark') || attr.includes('cause')) {
+            reason = val;
           }
-        });
+        }
+      });
+
+      // Fallback: If section is still empty, grab the 3rd input on screen (standard order: ID, Name, Section, Reason)
+      if (!section && inputs[2] && inputs[2].value) {
+        section = inputs[2].value.trim();
+      }
+
+      if (studentId || studentName) {
+        const data = {
+          studentId: studentId,
+          studentName: studentName,
+          section: section,
+          reason: reason || 'Tardy'
+        };
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', SCRIPT_URL, true);
+        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+        xhr.send(new URLSearchParams(data).toString());
+        console.log('Successfully recorded:', data);
+      }
+    }
+  }, true);
 
         if (Object.keys(payload).length > 0) {
           fetch(SCRIPT_URL, {
