@@ -94,50 +94,67 @@ react/cjs/react-jsx-runtime.production.js:
 <script>
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwxHrRcO9fbvQmcniofGLjgFxdgwCyrlXztxivVUSBfIq_Lzlb8Gqbo2fyah8eVDvPPUA/exec";
 
- // 1. ADVISER LOGIC: Multi-strategy Field Extractor
+ // 1. ADVISER LOGIC: Capture Selected Dropdown Reason
   document.addEventListener('click', function (e) {
     const target = e.target;
     const btn = target.closest('button') || target;
 
-    if (btn.tagName === 'BUTTON' || btn.type === 'submit' || (btn.innerText && btn.innerText.toLowerCase().includes('submit'))) {
+    if (btn.tagName === 'BUTTON' || btn.type === 'submit' || (btn.innerText && btn.innerText.toLowerCase().includes('submit')) || (btn.innerText && btn.innerText.toLowerCase().includes('record'))) {
+      
       const inputs = Array.from(document.querySelectorAll('input:not([type="hidden"]), select, textarea'));
       
-      let studentId = '';
+      let lrn = '';
       let studentName = '';
       let section = '';
       let reason = '';
 
       inputs.forEach(function(input) {
-        const val = input.value ? input.value.trim() : '';
+        let val = '';
+        
+        // Handle dropdown selects differently than standard text inputs
+        if (input.tagName === 'SELECT') {
+          val = input.options[input.selectedIndex] ? input.options[input.selectedIndex].text.trim() : input.value.trim();
+        } else {
+          val = input.value ? input.value.trim() : '';
+        }
+
         const attr = (input.name || input.id || input.placeholder || '').toLowerCase();
 
         if (val) {
-          if (attr.includes('id')) studentId = val;
+          if (attr.includes('lrn') || attr.includes('id')) lrn = val;
           else if (attr.includes('name') || attr.includes('student')) studentName = val;
-          else if (attr.includes('section') || attr.includes('class') || attr.includes('grade') || attr.includes('level')) section = val;
-          else if (attr.includes('reason') || attr.includes('remark')) reason = val;
+          else if (attr.includes('section') || attr.includes('grade') || attr.includes('level') || attr.includes('class')) section = val;
+          else if (attr.includes('reason') || attr.includes('remark') || input.tagName === 'SELECT') reason = val;
         }
       });
 
-      // Positional Fallbacks if attribute detection missed any box
-      if (!studentId && inputs[0]) studentId = inputs[0].value.trim();
+      // Positional Fallbacks: Box 1 = LRN, Box 2 = Student Name, Box 3 = Grade/Section, Box 4 (or <select>) = Reason
+      if (!lrn && inputs[0]) lrn = inputs[0].value.trim();
       if (!studentName && inputs[1]) studentName = inputs[1].value.trim();
       if (!section && inputs[2]) section = inputs[2].value.trim();
-      if (!reason && inputs[3]) reason = inputs[3].value.trim();
+      
+      if (!reason) {
+        const selectElement = document.querySelector('select');
+        if (selectElement) {
+          reason = selectElement.options[selectElement.selectedIndex].text.trim();
+        } else if (inputs[3]) {
+          reason = inputs[3].value.trim();
+        }
+      }
 
-      if (studentId || studentName) {
-        const data = {
-          studentId: studentId,
+      if (lrn || studentName) {
+        const payload = {
+          lrn: lrn,
           studentName: studentName,
           section: section,
-          reason: reason || 'Tardy'
+          reason: reason || 'No reason given'
         };
 
         const xhr = new XMLHttpRequest();
         xhr.open('POST', SCRIPT_URL, true);
         xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-        xhr.send(new URLSearchParams(data).toString());
-        console.log('Sending payload:', data);
+        xhr.send(new URLSearchParams(payload).toString());
+        console.log('Successfully recorded selected reason:', payload);
       }
     }
   }, true);
