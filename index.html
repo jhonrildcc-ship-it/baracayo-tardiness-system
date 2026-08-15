@@ -94,55 +94,67 @@ react/cjs/react-jsx-runtime.production.js:
 <script>
   const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwxHrRcO9fbvQmcniofGLjgFxdgwCyrlXztxivVUSBfIq_Lzlb8Gqbo2fyah8eVDvPPUA/exec";
 
- // 1. ADVISER LOGIC: Capture Selected Dropdown Reason
+  // 1. ADVISER LOGIC: Guarded Single-Submission Form Extractor
+  let isSubmitting = false;
+
   document.addEventListener('click', function (e) {
-    const target = e.target;
-    const btn = target.closest('button') || target;
+    const btn = e.target.closest('button, input[type="submit"]');
 
-    if (btn.tagName === 'BUTTON' || btn.type === 'submit' || (btn.innerText && btn.innerText.toLowerCase().includes('submit')) || (btn.innerText && btn.innerText.toLowerCase().includes('record'))) {
+    if (btn && !isSubmitting) {
+      const btnText = (btn.innerText || btn.value || '').toLowerCase();
       
-      const inputs = Array.from(document.querySelectorAll('input:not([type="hidden"]), select, textarea'));
-      
-      let lrn = '';
-      let studentName = '';
-      let section = '';
-      let reason = '';
-
-      inputs.forEach(function(input) {
-        let val = '';
+      if (btnText.includes('submit') || btnText.includes('record') || btnText.includes('add') || btnText.includes('save') || btn.type === 'submit') {
         
-        // Handle dropdown selects differently than standard text inputs
-        if (input.tagName === 'SELECT') {
-          val = input.options[input.selectedIndex] ? input.options[input.selectedIndex].text.trim() : input.value.trim();
-        } else {
-          val = input.value ? input.value.trim() : '';
+        const allInputs = Array.from(document.querySelectorAll('input:not([type="hidden"]), select, textarea'));
+        
+        let lrn = '';
+        let studentName = '';
+        let section = '';
+        let reason = '';
+
+        allInputs.forEach(function(input) {
+          let val = '';
+          if (input.tagName === 'SELECT') {
+            val = input.options[input.selectedIndex] ? input.options[input.selectedIndex].text.trim() : '';
+          } else {
+            val = input.value ? input.value.trim() : '';
+          }
+
+          if (!val) return;
+
+          const attr = (input.name || input.id || input.placeholder || '').toLowerCase();
+
+          if (attr.includes('lrn') || attr.includes('id')) {
+            lrn = val;
+          } else if (attr.includes('name') || attr.includes('student')) {
+            if (!val.toLowerCase().includes('term') && !val.toLowerCase().includes('select')) {
+              studentName = val;
+            }
+          } else if (attr.includes('section') || attr.includes('grade') || attr.includes('level') || attr.includes('class')) {
+            section = val;
+          } else if (attr.includes('reason') || attr.includes('remark') || input.tagName === 'SELECT') {
+            reason = val;
+          }
+        });
+
+        const textInputs = allInputs.filter(i => i.tagName === 'INPUT' && i.type !== 'hidden');
+        if (!lrn && textInputs[0]) lrn = textInputs[0].value.trim();
+        if (!studentName && textInputs[1]) studentName = textInputs[1].value.trim();
+        if (!section && textInputs[2]) section = textInputs[2].value.trim();
+
+        const selectEl = document.querySelector('select');
+        if (selectEl) {
+          reason = selectEl.options[selectEl.selectedIndex].text.trim();
         }
 
-        const attr = (input.name || input.id || input.placeholder || '').toLowerCase();
-
-        if (val) {
-          if (attr.includes('lrn') || attr.includes('id')) lrn = val;
-          else if (attr.includes('name') || attr.includes('student')) studentName = val;
-          else if (attr.includes('section') || attr.includes('grade') || attr.includes('level') || attr.includes('class')) section = val;
-          else if (attr.includes('reason') || attr.includes('remark') || input.tagName === 'SELECT') reason = val;
+        if (!lrn && !studentName) {
+          console.log('Submission blocked: Form fields are empty.');
+          return;
         }
-      });
 
-      // Positional Fallbacks: Box 1 = LRN, Box 2 = Student Name, Box 3 = Grade/Section, Box 4 (or <select>) = Reason
-      if (!lrn && inputs[0]) lrn = inputs[0].value.trim();
-      if (!studentName && inputs[1]) studentName = inputs[1].value.trim();
-      if (!section && inputs[2]) section = inputs[2].value.trim();
-      
-      if (!reason) {
-        const selectElement = document.querySelector('select');
-        if (selectElement) {
-          reason = selectElement.options[selectElement.selectedIndex].text.trim();
-        } else if (inputs[3]) {
-          reason = inputs[3].value.trim();
-        }
-      }
+        isSubmitting = true;
+        setTimeout(function() { isSubmitting = false; }, 2000);
 
-      if (lrn || studentName) {
         const payload = {
           lrn: lrn,
           studentName: studentName,
@@ -154,12 +166,12 @@ react/cjs/react-jsx-runtime.production.js:
         xhr.open('POST', SCRIPT_URL, true);
         xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
         xhr.send(new URLSearchParams(payload).toString());
-        console.log('Successfully recorded selected reason:', payload);
+        console.log('Single record submitted cleanly:', payload);
       }
     }
   }, true);
 
-  // 2. ADMIN LOGIC: Centralized Live Dashboard
+  // 2. ADMIN LOGIC: Live Admin View Popup Modal
   function fetchAdminMasterData() {
     const container = document.getElementById('admin-sheets-modal-body');
     if (container) container.innerHTML = '<p style="padding: 20px; text-align: center;">Loading all section records...</p>';
