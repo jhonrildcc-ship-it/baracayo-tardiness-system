@@ -261,71 +261,99 @@ react/cjs/react-jsx-runtime.production.js:
       fetchAdminMasterData();
     }, 10000);
   });
-
- // 4. CROSS-DEVICE SYNC: Load Google Sheets records into local dashboard metrics on page load
+// 4. CROSS-DEVICE SYNC: Load Google Sheets records into local dashboard metrics on page load
   function syncGoogleSheetsToDashboard() {
     fetch(SCRIPT_URL + '?t=' + new Date().getTime())
-      .then(res => res.json())
-      .then(data => {
+      .then(function(res) { return res.json(); })
+      .then(function(data) {
         if (!data || data.length <= 1) return;
 
         // Extract header indexes dynamically
-        const headers = data[0].map(h => String(h).toLowerCase().trim());
-        const dateIdx = headers.findIndex(h => h.includes('date'));
-        const termIdx = headers.findIndex(h => h.includes('term'));
-        const lrnIdx = headers.findIndex(h => h.includes('lrn') || h.includes('student'));
-        const gradeIdx = headers.findIndex(h => h.includes('grade'));
-        const sectionIdx = headers.findIndex(h => h.includes('section'));
-        const arrivalIdx = headers.findIndex(h => h.includes('arrival') || h.includes('time'));
-        const lateIdx = headers.findIndex(h => h.includes('late') || h.includes('minute'));
-        const reasonIdx = headers.findIndex(h => h.includes('reason'));
+        const headers = data[0].map(function(h) { return String(h).toLowerCase().trim(); });
+        const dateIdx = headers.findIndex(function(h) { return h.includes('date'); });
+        const termIdx = headers.findIndex(function(h) { return h.includes('term'); });
+        const lrnIdx = headers.findIndex(function(h) { return h.includes('lrn') || h.includes('student'); });
+        const gradeIdx = headers.findIndex(function(h) { return h.includes('grade'); });
+        const arrivalIdx = headers.findIndex(function(h) { return h.includes('arrival') || h.includes('time'); });
+        const lateIdx = headers.findIndex(function(h) { return h.includes('late') || h.includes('minute'); });
+        const reasonIdx = headers.findIndex(function(h) { return h.includes('reason'); });
 
         const syncedRecords = [];
-        const studentSet = new Set();
+        const studentMap = new Map();
 
-        // Process data rows
+        // Process data rows from Google Sheets
         for (let i = 1; i < data.length; i++) {
           const row = data[i];
-          const studentVal = lrnIdx !== -1 ? row[lrnIdx] : '';
+          const studentVal = lrnIdx !== -1 ? String(row[lrnIdx]).trim() : '';
           
           if (!studentVal) continue;
-          studentSet.add(studentVal);
 
+          const gradeVal = gradeIdx !== -1 ? String(row[gradeIdx]).trim() : '';
+          const parts = gradeVal.split('-');
+          const gradeLevel = parts[0] ? parts[0].trim() : 'Grade 7';
+          const section = parts[1] ? parts[1].trim() : 'General';
+
+          // 1. Build Student Entry for "Total Students"
+          if (!studentMap.has(studentVal)) {
+            studentMap.set(studentVal, {
+              id: 'std_' + i + '_' + studentVal,
+              lrn: studentVal,
+              name: studentVal,
+              studentName: studentVal,
+              grade: gradeLevel,
+              gradeLevel: gradeLevel,
+              section: section,
+              status: 'Active'
+            });
+          }
+
+          // 2. Build Tardiness Record for Tardiness Cards & Charts
           syncedRecords.push({
             id: 'gs_' + i + '_' + Date.now(),
             lrn: studentVal,
             studentName: studentVal,
-            date: dateIdx !== -1 ? row[dateIdx] : '',
-            term: termIdx !== -1 ? row[termIdx] : 'Term 1',
-            gradeLevel: gradeIdx !== -1 ? row[gradeIdx] : '',
-            section: sectionIdx !== -1 ? row[sectionIdx] : '',
-            timeOfArrival: arrivalIdx !== -1 ? row[arrivalIdx] : '',
-            minutesLate: lateIdx !== -1 ? row[lateIdx] : '',
-            reason: reasonIdx !== -1 ? row[reasonIdx] : 'Active'
+            date: dateIdx !== -1 ? String(row[dateIdx]).trim() : '',
+            term: termIdx !== -1 ? String(row[termIdx]).trim() : 'Term 1',
+            gradeLevel: gradeLevel,
+            section: section,
+            timeOfArrival: arrivalIdx !== -1 ? String(row[arrivalIdx]).trim() : '',
+            minutesLate: lateIdx !== -1 ? String(row[lateIdx]).trim() : '',
+            reason: reasonIdx !== -1 ? String(row[reasonIdx]).trim() : 'Active'
           });
         }
 
-        // Save back to local storage so React components read cross-device data
+        // Merge newly fetched students with existing local student entries
+        let currentStudents = [];
+        try {
+          currentStudents = JSON.parse(localStorage.getItem('students') || '[]');
+        } catch(e) { currentStudents = []; }
+
+        studentMap.forEach(function(studentObj, lrnKey) {
+          const exists = currentStudents.some(function(s) { 
+            return String(s.lrn || s.id || s.name) === String(lrnKey); 
+          });
+          if (!exists) {
+            currentStudents.push(studentObj);
+          }
+        });
+
+        // Save updated data to browser storage keys used by React components
+        localStorage.setItem('students', JSON.stringify(currentStudents));
         localStorage.setItem('tardyRecords', JSON.stringify(syncedRecords));
         localStorage.setItem('records', JSON.stringify(syncedRecords));
 
-        // Sync total student list count
-        if (studentSet.size > 0) {
-          const studentList = Array.from(studentSet).map(s => ({ lrn: s, name: s }));
-          localStorage.setItem('students', JSON.stringify(studentList));
-        }
-
-        // Refresh UI
+        // Broadcast change event to trigger re-render on React Dashboard UI
         window.dispatchEvent(new Event('storage'));
       })
-      .catch(err => console.error('Dashboard Cross-Device Sync Failed:', err));
+      .catch(function(err) {
+        console.error('Dashboard Cross-Device Sync Failed:', err);
+      });
   }
 
-  // Trigger sync on load and poll every 15 seconds
+  // Sync on load and auto-refresh every 10 seconds
   window.addEventListener('DOMContentLoaded', function() {
     syncGoogleSheetsToDashboard();
-    setInterval(syncGoogleSheetsToDashboard, 15000);
+    setInterval(syncGoogleSheetsToDashboard, 10000);
   });
-</script>
-</body>
-</html>
+ 
+ 
