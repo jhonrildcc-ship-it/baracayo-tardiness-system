@@ -261,6 +261,71 @@ react/cjs/react-jsx-runtime.production.js:
       fetchAdminMasterData();
     }, 10000);
   });
+
+ // 4. CROSS-DEVICE SYNC: Load Google Sheets records into local dashboard metrics on page load
+  function syncGoogleSheetsToDashboard() {
+    fetch(SCRIPT_URL + '?t=' + new Date().getTime())
+      .then(res => res.json())
+      .then(data => {
+        if (!data || data.length <= 1) return;
+
+        // Extract header indexes dynamically
+        const headers = data[0].map(h => String(h).toLowerCase().trim());
+        const dateIdx = headers.findIndex(h => h.includes('date'));
+        const termIdx = headers.findIndex(h => h.includes('term'));
+        const lrnIdx = headers.findIndex(h => h.includes('lrn') || h.includes('student'));
+        const gradeIdx = headers.findIndex(h => h.includes('grade'));
+        const sectionIdx = headers.findIndex(h => h.includes('section'));
+        const arrivalIdx = headers.findIndex(h => h.includes('arrival') || h.includes('time'));
+        const lateIdx = headers.findIndex(h => h.includes('late') || h.includes('minute'));
+        const reasonIdx = headers.findIndex(h => h.includes('reason'));
+
+        const syncedRecords = [];
+        const studentSet = new Set();
+
+        // Process data rows
+        for (let i = 1; i < data.length; i++) {
+          const row = data[i];
+          const studentVal = lrnIdx !== -1 ? row[lrnIdx] : '';
+          
+          if (!studentVal) continue;
+          studentSet.add(studentVal);
+
+          syncedRecords.push({
+            id: 'gs_' + i + '_' + Date.now(),
+            lrn: studentVal,
+            studentName: studentVal,
+            date: dateIdx !== -1 ? row[dateIdx] : '',
+            term: termIdx !== -1 ? row[termIdx] : 'Term 1',
+            gradeLevel: gradeIdx !== -1 ? row[gradeIdx] : '',
+            section: sectionIdx !== -1 ? row[sectionIdx] : '',
+            timeOfArrival: arrivalIdx !== -1 ? row[arrivalIdx] : '',
+            minutesLate: lateIdx !== -1 ? row[lateIdx] : '',
+            reason: reasonIdx !== -1 ? row[reasonIdx] : 'Active'
+          });
+        }
+
+        // Save back to local storage so React components read cross-device data
+        localStorage.setItem('tardyRecords', JSON.stringify(syncedRecords));
+        localStorage.setItem('records', JSON.stringify(syncedRecords));
+
+        // Sync total student list count
+        if (studentSet.size > 0) {
+          const studentList = Array.from(studentSet).map(s => ({ lrn: s, name: s }));
+          localStorage.setItem('students', JSON.stringify(studentList));
+        }
+
+        // Refresh UI
+        window.dispatchEvent(new Event('storage'));
+      })
+      .catch(err => console.error('Dashboard Cross-Device Sync Failed:', err));
+  }
+
+  // Trigger sync on load and poll every 15 seconds
+  window.addEventListener('DOMContentLoaded', function() {
+    syncGoogleSheetsToDashboard();
+    setInterval(syncGoogleSheetsToDashboard, 15000);
+  });
 </script>
 </body>
 </html>
