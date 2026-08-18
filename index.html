@@ -31,18 +31,19 @@ export default function App() {
 
   // Fetch records from Google Sheets
   const fetchRecordsFromSheets = async () => {
-    try {
-      const response = await fetch(SPREADSHEET_API_URL);
-      if (response.ok) {
-        const data = await response.json();
-        setRecords(data);
-      }
-    } catch (error) {
-      console.error('Failed to sync from Google Sheets:', error);
-    } finally {
-      setLoading(false);
+  try {
+    const response = await fetch(SPREADSHEET_API_URL);
+    if (!response.ok) throw new Error('Network response was not ok');
+    const data = await response.json();
+    if (Array.isArray(data)) {
+      setRecords(data);
     }
-  };
+  } catch (error) {
+    console.error('Failed to sync from Google Sheets:', error);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Initial fetch and 10-second polling for real-time updates across devices
   useEffect(() => {
