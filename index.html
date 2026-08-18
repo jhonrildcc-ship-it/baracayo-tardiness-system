@@ -1,247 +1,325 @@
-<!-- CENTRAL GOOGLE SHEETS CONNECTOR -->
-<script>
-  const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwRSwV6WYGXrJOR7a8I6XTk67aB-LBckNKbjvWGRCYZHBml5utwqqzk7aTvCGiPWPAaXA/exec";
+import React, { useState, useEffect, useMemo } from 'react';
 
-  // 1. ADVISER LOGIC: Auto-Detect Teacher's Section & Post Entry
-  let isSubmitting = false;
+// Replace with your deployed Google Apps Script Web App URL
+const SPREADSHEET_API_URL = 'https://script.google.com/macros/s/AKfycbwRSwV6WYGXrJOR7a8I6XTk67aB-LBckNKbjvWGRCYZHBml5utwqqzk7aTvCGiPWPAaXA/exec';
 
-  document.addEventListener('click', function (e) {
-    const btn = e.target.closest('button, input[type="submit"]');
+const GRADE_LEVELS = ['Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'];
+const REASON_CATEGORIES = ['Transportation', 'Weather / Rain', 'Health / Medical', 'Personal / Family', 'Distance / Travel Time', 'Other'];
 
-    if (btn && !isSubmitting) {
-      const btnText = (btn.innerText || btn.value || '').toLowerCase();
+export default function App() {
+  const [activeRole, setActiveRole] = useState(() => localStorage.getItem('bis_user_role') || null);
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [records, setRecords] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-      // Ignore auth/login or admin button clicks
-      if (btnText.includes('login') || btnText.includes('sign in') || btnText.includes('admin')) return;
-
-      if (btnText.includes('queue') || btnText.includes('submit') || btnText.includes('record') || btnText.includes('add')) {
-        
-        // Auto-detect logged-in teacher's Grade & Section from their active profile
-        let userSection = '';
-        let userGrade = '';
-        try {
-          const currentUser = JSON.parse(
-            localStorage.getItem('currentUser') || 
-            sessionStorage.getItem('currentUser') || 
-            localStorage.getItem('user') || '{}'
-          );
-          userSection = currentUser.section || currentUser.assignedSection || currentUser.sectionName || '';
-          userGrade = currentUser.grade || currentUser.gradeLevel || currentUser.assignedGrade || '';
-        } catch(err) { 
-          console.error('User profile lookup error:', err); 
-        }
-
-        const inputs = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="password"]), select, textarea'));
-        const todayStr = new Date().toISOString().split('T')[0];
-
-        let payload = {
-          date: todayStr,
-          term: 'Term 1',
-          gradeLevel: userGrade,
-          section: userSection,
-          lrn: '',
-          studentName: '',
-          timeOfArrival: '',
-          minutesLate: '',
-          reason: '',
-          remarks: ''
-        };
-
-        inputs.forEach(function(input) {
-          let val = input.tagName === 'SELECT' 
-            ? (input.options[input.selectedIndex] ? input.options[input.selectedIndex].text.trim() : '') 
-            : (input.value ? input.value.trim() : '');
-
-          if (!val) return;
-
-          const attr = ((input.name || input.id || '') + ' ' + (input.placeholder || '') + ' ' + (input.ariaLabel || '')).toLowerCase();
-
-          if (attr.includes('date') && !attr.includes('validate')) payload.date = val;
-          else if (attr.includes('term')) payload.term = val;
-          else if (attr.includes('grade') && !payload.gradeLevel) payload.gradeLevel = val;
-          else if (attr.includes('section') && !payload.section) payload.section = val;
-          else if (attr.includes('lrn')) payload.lrn = val;
-          else if (attr.includes('student') || attr.includes('name') || attr.includes('search')) {
-            // Separate pure numeric LRNs from Student Names
-            if (/^\d+$/.test(val)) {
-              if (!payload.lrn) payload.lrn = val;
-            } else {
-              payload.studentName = val;
-            }
-          }
-          else if (attr.includes('time') || attr.includes('arrival')) payload.timeOfArrival = val;
-          else if (attr.includes('minute') || attr.includes('late') || attr.includes('computed')) payload.minutesLate = val;
-          else if (attr.includes('reason') || input.tagName === 'SELECT') payload.reason = val;
-          else if (attr.includes('remark') || attr.includes('option')) payload.remarks = val;
-        });
-
-        // Ensure we have at least an LRN or Student Name before logging
-        if (!payload.studentName && !payload.lrn) return;
-
-        // Prevent double-click rapid submissions
-        isSubmitting = true;
-        setTimeout(function() { isSubmitting = false; }, 2000);
-
-        // Post directly to Google Sheets database
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', SCRIPT_URL, true);
-        xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-        xhr.onload = function() {
-          if (typeof syncGoogleSheetsToDashboard === 'function') {
-            syncGoogleSheetsToDashboard();
-          }
-        };
-        xhr.send(new URLSearchParams(payload).toString());
-      }
-    }
-  }, true);
-
-  // 2. REAL-TIME CROSS-DEVICE DASHBOARD SYNC (Pulls Google Sheets entries live)
-  function syncGoogleSheetsToDashboard() {
-    fetch(SCRIPT_URL + '?t=' + new Date().getTime())
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        if (!data || data.length <= 1) return;
-
-        // Dynamic Header Mapping
-        const headers = data[0].map(function(h) { return String(h).toLowerCase().trim(); });
-        const dateIdx = headers.findIndex(function(h) { return h.includes('date'); });
-        const termIdx = headers.findIndex(function(h) { return h.includes('term'); });
-        const gradeIdx = headers.findIndex(function(h) { return h.includes('grade'); });
-        const secIdx = headers.findIndex(function(h) { return h.includes('section'); });
-        const lrnIdx = headers.findIndex(function(h) { return h === 'lrn'; });
-        const nameIdx = headers.findIndex(function(h) { return h.includes('student name') || h.includes('name'); });
-        const arrivalIdx = headers.findIndex(function(h) { return h.includes('arrival') || h.includes('time'); });
-        const lateIdx = headers.findIndex(function(h) { return h.includes('late') || h.includes('minute'); });
-        const reasonIdx = headers.findIndex(function(h) { return h.includes('reason'); });
-        const remarkIdx = headers.findIndex(function(h) { return h.includes('remark'); });
-
-        const syncedRecords = [];
-        const studentMap = new Map();
-
-        // Process each row recorded in Google Sheets
-        for (let i = 1; i < data.length; i++) {
-          const row = data[i];
-          const lrnVal = lrnIdx !== -1 ? String(row[lrnIdx]).trim() : '';
-          const nameVal = nameIdx !== -1 ? String(row[nameIdx]).trim() : '';
-          const studentIdentifier = lrnVal || nameVal;
-
-          if (!studentIdentifier) continue;
-
-          const gradeVal = gradeIdx !== -1 ? String(row[gradeIdx]).trim() : 'Grade 7';
-          const sectionVal = secIdx !== -1 ? String(row[secIdx]).trim() : 'General';
-
-          // A. Build Master Student List (Updates "Total Students" count across devices)
-          if (!studentMap.has(studentIdentifier)) {
-            studentMap.set(studentIdentifier, {
-              id: 'std_' + studentIdentifier,
-              lrn: lrnVal || studentIdentifier,
-              name: nameVal || studentIdentifier,
-              studentName: nameVal || studentIdentifier,
-              grade: gradeVal,
-              gradeLevel: gradeVal,
-              section: sectionVal,
-              status: 'Active'
-            });
-          }
-
-          // B. Build Master Tardiness Log (Updates "Late Today" & Chart summaries)
-          syncedRecords.push({
-            id: 'gs_' + i,
-            lrn: lrnVal,
-            studentName: nameVal || lrnVal,
-            date: dateIdx !== -1 ? String(row[dateIdx]).trim() : '',
-            term: termIdx !== -1 ? String(row[termIdx]).trim() : 'Term 1',
-            gradeLevel: gradeVal,
-            section: sectionVal,
-            timeOfArrival: arrivalIdx !== -1 ? String(row[arrivalIdx]).trim() : '',
-            minutesLate: lateIdx !== -1 ? String(row[lateIdx]).trim() : '',
-            reason: reasonIdx !== -1 ? String(row[reasonIdx]).trim() : 'Active',
-            remarks: remarkIdx !== -1 ? String(row[remarkIdx]).trim() : ''
-          });
-        }
-
-        // Save updated cross-device entries into local browser state for React UI rendering
-        const studentArray = Array.from(studentMap.values());
-        localStorage.setItem('students', JSON.stringify(studentArray));
-        localStorage.setItem('tardyRecords', JSON.stringify(syncedRecords));
-        localStorage.setItem('records', JSON.stringify(syncedRecords));
-
-        // Trigger UI event re-render
-        window.dispatchEvent(new Event('storage'));
-      })
-      .catch(function(err) {
-        console.error('Real-time sync error:', err);
-      });
-  }
-
-  // 3. LIVE AUTO-REFRESH & ADMIN MODAL SETUP
-  function fetchAdminMasterData() {
-    const container = document.getElementById('admin-sheets-modal-body');
-    if (container) container.innerHTML = '<p style="padding: 20px; text-align: center;">Loading live section records...</p>';
-
-    fetch(SCRIPT_URL + '?t=' + new Date().getTime())
-      .then(function (res) { return res.json(); })
-      .then(function (data) {
-        if (!data || data.length === 0) {
-          if (container) container.innerHTML = '<p style="padding: 20px;">No records found in Google Sheet.</p>';
-          return;
-        }
-
-        let tableHtml = '<table style="width:100%; border-collapse:collapse; font-family:sans-serif; text-align:left;">';
-        data.forEach(function (row, rowIndex) {
-          const isHeader = rowIndex === 0;
-          const tag = isHeader ? 'th' : 'td';
-          const bg = isHeader ? '#1a73e8' : (rowIndex % 2 === 0 ? '#f8f9fa' : '#ffffff');
-          const color = isHeader ? '#ffffff' : '#333333';
-
-          tableHtml += '<tr style="background-color: ' + bg + '; color: ' + color + ';">';
-          row.forEach(function (cell) {
-            tableHtml += '<' + tag + ' style="padding: 10px; border: 1px solid #ddd;">' + cell + '</' + tag + '>';
-          });
-          tableHtml += '</tr>';
-        });
-        tableHtml += '</table>';
-        if (container) container.innerHTML = tableHtml;
-      })
-      .catch(function (err) {
-        if (container) container.innerHTML = '<p style="padding: 20px; color: red;">Failed to load data. Check permissions.</p>';
-      });
-  }
-
-  window.addEventListener('DOMContentLoaded', function () {
-    const adminBtn = document.createElement('button');
-    adminBtn.innerText = '📊 Central Admin View';
-    adminBtn.style.cssText = 'position: fixed; bottom: 20px; right: 20px; z-index: 99999; padding: 12px 20px; background-color: #1a73e8; color: white; border: none; border-radius: 25px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); font-weight: bold; cursor: pointer;';
-
-    const modal = document.createElement('div');
-    modal.id = 'admin-sheets-modal';
-    modal.style.cssText = 'display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 100000; justify-content: center; align-items: center;';
-
-    modal.innerHTML = '<div style="background: white; width: 90%; max-width: 900px; max-height: 85vh; border-radius: 10px; overflow: hidden; display: flex; flex-direction: column;">' +
-      '<div style="padding: 15px 20px; background: #1a73e8; color: white; display: flex; justify-content: space-between; align-items: center;">' +
-        '<h3 style="margin: 0;">Live Admin View — All Section Records</h3>' +
-        '<button id="close-admin-modal" style="background: transparent; border: none; color: white; font-size: 20px; cursor: pointer;">✕</button>' +
-      '</div>' +
-      '<div id="admin-sheets-modal-body" style="padding: 20px; overflow-y: auto; flex: 1;"></div>' +
-    '</div>';
-
-    document.body.appendChild(adminBtn);
-    document.body.appendChild(modal);
-
-    adminBtn.addEventListener('click', function () {
-      modal.style.display = 'flex';
-      fetchAdminMasterData();
-    });
-
-    document.getElementById('close-admin-modal').addEventListener('click', function () {
-      modal.style.display = 'none';
-    });
-
-    // Run real-time sync on load and poll every 5 seconds for immediate cross-device updates
-    syncGoogleSheetsToDashboard();
-    setInterval(syncGoogleSheetsToDashboard, 5000);
+  const [formData, setFormData] = useState({
+    studentId: '',
+    studentName: '',
+    gradeLevel: 'Grade 7',
+    section: '',
+    date: new Date().toISOString().split('T')[0],
+    arrivalTime: '07:30 AM',
+    reasonCategory: 'Transportation',
+    notes: '',
   });
-</script>
-</body>
-</html>
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedGrade, setSelectedGrade] = useState('All');
+  const [selectedCategory, setSelectedCategory] = useState('All');
+  const [filterDate, setFilterDate] = useState('');
+
+  // Fetch records from Google Sheets
+  const fetchRecordsFromSheets = async () => {
+    try {
+      const response = await fetch(SPREADSHEET_API_URL);
+      if (response.ok) {
+        const data = await response.json();
+        setRecords(data);
+      }
+    } catch (error) {
+      console.error('Failed to sync from Google Sheets:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Initial fetch and 10-second polling for real-time updates across devices
+  useEffect(() => {
+    fetchRecordsFromSheets();
+    const interval = setInterval(fetchRecordsFromSheets, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleSelectRole = (role) => {
+    setActiveRole(role);
+    if (role) {
+      localStorage.setItem('bis_user_role', role);
+    } else {
+      localStorage.removeItem('bis_user_role');
+    }
+  };
+
+  // Submit new entry to Google Sheets
+  const handleAddRecord = async (e) => {
+    e.preventDefault();
+    if (!formData.studentName || !formData.section) return;
+
+    setIsSubmitting(true);
+    const newEntry = {
+      id: `TRD-${Math.floor(1000 + Math.random() * 9000)}`,
+      ...formData,
+      status: 'Recorded',
+    };
+
+    try {
+      // Optimistic state update
+      setRecords((prev) => [newEntry, ...prev]);
+
+      await fetch(SPREADSHEET_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newEntry),
+        mode: 'no-cors', // Required for Google Apps Script Web App redirects
+      });
+
+      setFormData({
+        studentId: '',
+        studentName: '',
+        gradeLevel: 'Grade 7',
+        section: '',
+        date: new Date().toISOString().split('T')[0],
+        arrivalTime: '07:30 AM',
+        reasonCategory: 'Transportation',
+        notes: '',
+      });
+
+      // Refresh data from spreadsheet
+      setTimeout(fetchRecordsFromSheets, 1500);
+      setActiveTab('records');
+    } catch (error) {
+      console.error('Error posting record:', error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const filteredRecords = useMemo(() => {
+    return records.filter((rec) => {
+      const matchesSearch =
+        (rec.studentName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (rec.studentId || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (rec.section || '').toLowerCase().includes(searchQuery.toLowerCase());
+
+      const matchesGrade = selectedGrade === 'All' || rec.gradeLevel === selectedGrade;
+      const matchesCategory = selectedCategory === 'All' || rec.reasonCategory === selectedCategory;
+      const matchesDate = !filterDate || rec.date === filterDate;
+
+      return matchesSearch && matchesGrade && matchesCategory && matchesDate;
+    });
+  }, [records, searchQuery, selectedGrade, selectedCategory, filterDate]);
+
+  if (!activeRole) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-white flex flex-col justify-center items-center p-6">
+        <div className="max-w-xl w-full text-center space-y-8">
+          <div className="space-y-3">
+            <h1 className="text-4xl font-bold text-blue-400">Baracayo Integrated School</h1>
+            <p className="text-xl text-slate-300">Tardiness Monitoring System</p>
+            <p className="text-sm text-slate-400">Real-time Cloud Spreadsheet Syncing Enabled</p>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <button
+              onClick={() => handleSelectRole('gate_scanner')}
+              className="p-6 bg-slate-800 border border-slate-700 hover:border-blue-500 rounded-xl space-y-3 transition"
+            >
+              <div className="text-2xl">📋</div>
+              <span className="font-semibold text-lg block">Gate Scanner Mode</span>
+              <span className="text-xs text-slate-400">Quick student entry logging</span>
+            </button>
+
+            <button
+              onClick={() => handleSelectRole('admin')}
+              className="p-6 bg-slate-800 border border-slate-700 hover:border-emerald-500 rounded-xl space-y-3 transition"
+            >
+              <div className="text-2xl">📊</div>
+              <span className="font-semibold text-lg block">Central Admin Portal</span>
+              <span className="text-xs text-slate-400">View real-time synced logs</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
+      <header className="bg-slate-900 text-white p-4 shadow-md flex justify-between items-center">
+        <div>
+          <h1 className="font-bold text-base">Baracayo Integrated School</h1>
+          <p className="text-xs text-slate-400">
+            {activeRole === 'admin' ? 'Central Admin Portal' : 'Gate Terminal Scanner'}
+          </p>
+        </div>
+        <div className="flex items-center space-x-3">
+          <button
+            onClick={fetchRecordsFromSheets}
+            className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-md font-medium"
+          >
+            🔄 Sync Now
+          </button>
+          <button
+            onClick={() => handleSelectRole(null)}
+            className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-3 py-1.5 rounded-md"
+          >
+            Switch Role
+          </button>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto w-full p-6 space-y-6">
+        {activeRole === 'admin' && (
+          <div className="flex space-x-2 border-b border-slate-200 pb-2">
+            <button
+              onClick={() => setActiveTab('dashboard')}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+                activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'text-slate-600'
+              }`}
+            >
+              Overview
+            </button>
+            <button
+              onClick={() => setActiveTab('records')}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+                activeTab === 'records' ? 'bg-blue-600 text-white' : 'text-slate-600'
+              }`}
+            >
+              Live Records ({records.length})
+            </button>
+          </div>
+        )}
+
+        {/* Form View for Gate Scanner or Admin 'Add' */}
+        {(activeRole === 'gate_scanner' || activeTab === 'add') && (
+          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm max-w-xl mx-auto space-y-4">
+            <h2 className="text-lg font-bold text-slate-800">Record Tardy Student</h2>
+            <form onSubmit={handleAddRecord} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <input
+                  type="text"
+                  required
+                  placeholder="Student ID"
+                  value={formData.studentId}
+                  onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
+                  className="border p-2 rounded text-sm w-full"
+                />
+                <input
+                  type="text"
+                  required
+                  placeholder="Student Full Name"
+                  value={formData.studentName}
+                  onChange={(e) => setFormData({ ...formData, studentName: e.target.value })}
+                  className="border p-2 rounded text-sm w-full"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <select
+                  value={formData.gradeLevel}
+                  onChange={(e) => setFormData({ ...formData, gradeLevel: e.target.value })}
+                  className="border p-2 rounded text-sm w-full"
+                >
+                  {GRADE_LEVELS.map((g) => (
+                    <option key={g} value={g}>{g}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  required
+                  placeholder="Section"
+                  value={formData.section}
+                  onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+                  className="border p-2 rounded text-sm w-full"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <input
+                  type="text"
+                  value={formData.arrivalTime}
+                  onChange={(e) => setFormData({ ...formData, arrivalTime: e.target.value })}
+                  className="border p-2 rounded text-sm w-full"
+                />
+                <select
+                  value={formData.reasonCategory}
+                  onChange={(e) => setFormData({ ...formData, reasonCategory: e.target.value })}
+                  className="border p-2 rounded text-sm w-full"
+                >
+                  {REASON_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
+
+              <textarea
+                placeholder="Notes / Specific Reason"
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                className="border p-2 rounded text-sm w-full"
+              />
+
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition"
+              >
+                {isSubmitting ? 'Syncing to Google Sheets...' : 'Submit Entry'}
+              </button>
+            </form>
+          </div>
+        )}
+
+        {/* Live Records View */}
+        {activeRole === 'admin' && activeTab === 'records' && (
+          <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
+            <div className="flex justify-between items-center">
+              <h2 className="text-lg font-bold text-slate-800">Synced Google Sheet Data</h2>
+              <span className="text-xs text-slate-400">
+                {loading ? 'Fetching sheet updates...' : `Total: ${filteredRecords.length} records`}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm border-collapse">
+                <thead>
+                  <tr className="bg-slate-100 border-b">
+                    <th className="p-3">ID</th>
+                    <th className="p-3">Student Name</th>
+                    <th className="p-3">Grade & Section</th>
+                    <th className="p-3">Date</th>
+                    <th className="p-3">Time</th>
+                    <th className="p-3">Reason</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredRecords.map((item, idx) => (
+                    <tr key={item.id || idx}>
+                      <td className="p-3 font-mono text-xs">{item.id}</td>
+                      <td className="p-3 font-medium">{item.studentName}</td>
+                      <td className="p-3">{item.gradeLevel} - {item.section}</td>
+                      <td className="p-3">{item.date}</td>
+                      <td className="p-3">{item.arrivalTime}</td>
+                      <td className="p-3">{item.reasonCategory}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+                
