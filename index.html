@@ -2,116 +2,39 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Baracayo Integrated School</title>
-  <!-- Load React, ReactDOM, and Babel -->
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Baracayo Integrated School - Tardiness System</title>
+
   <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- React & ReactDOM CDN -->
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+
+  <!-- Babel Compiler to read JSX in browser -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
-<body class="bg-slate-900 text-white">
+<body class="bg-slate-900 text-slate-100">
 
   <div id="root"></div>
 
-  <!-- Note type="text/babel" -->
+  <!-- Note: type="text/babel" tells Babel to compile this JS script -->
   <script type="text/babel">
     const { useState, useEffect, useMemo } = React;
 
-    // PASTED YOUR REACT CODE HERE...
-    
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<App />);
-  </script>
-</body>
+    const SPREADSHEET_API_URL = 'https://script.google.com/macros/s/AKfycbwRSwV6WYGXRJOR7a8I6XTk67aB-LBckNKbjvWGRCYZHBml5utwqqzk7aTvCGiPWPaaXA/exec';
+    const GRADE_LEVELS = ['Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'];
+    const REASON_CATEGORIES = ['Transportation', 'Weather / Rain', 'Health / Medical', 'Personal / Family', 'Distance / Travel Time', 'Other'];
 
-import React, { useState, useEffect, useMemo } from 'react';
+    function App() {
+      const [activeRole, setActiveRole] = useState(() => localStorage.getItem('bis_user_role') || null);
+      const [activeTab, setActiveTab] = useState('dashboard');
+      const [records, setRecords] = useState([]);
+      const [loading, setLoading] = useState(true);
+      const [isSubmitting, setIsSubmitting] = useState(false);
 
-// Replace with your deployed Google Apps Script Web App URL
-const SPREADSHEET_API_URL = 'https://script.google.com/macros/s/AKfycbwRSwV6WYGXrJOR7a8I6XTk67aB-LBckNKbjvWGRCYZHBml5utwqqzk7aTvCGiPWPAaXA/exec';
-
-const GRADE_LEVELS = ['Grade 7', 'Grade 8', 'Grade 9', 'Grade 10', 'Grade 11', 'Grade 12'];
-const REASON_CATEGORIES = ['Transportation', 'Weather / Rain', 'Health / Medical', 'Personal / Family', 'Distance / Travel Time', 'Other'];
-
-export default function App() {
-  const [activeRole, setActiveRole] = useState(() => localStorage.getItem('bis_user_role') || null);
-  const [activeTab, setActiveTab] = useState('dashboard');
-  const [records, setRecords] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const [formData, setFormData] = useState({
-    studentId: '',
-    studentName: '',
-    gradeLevel: 'Grade 7',
-    section: '',
-    date: new Date().toISOString().split('T')[0],
-    arrivalTime: '07:30 AM',
-    reasonCategory: 'Transportation',
-    notes: '',
-  });
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedGrade, setSelectedGrade] = useState('All');
-  const [selectedCategory, setSelectedCategory] = useState('All');
-  const [filterDate, setFilterDate] = useState('');
-
-  // Fetch records from Google Sheets
-  const fetchRecordsFromSheets = async () => {
-  try {
-    const response = await fetch(SPREADSHEET_API_URL);
-    if (!response.ok) throw new Error('Network response was not ok');
-    const data = await response.json();
-    if (Array.isArray(data)) {
-      setRecords(data);
-    }
-  } catch (error) {
-    console.error('Failed to sync from Google Sheets:', error);
-  } finally {
-    setLoading(false);
-  }
-};
-
-  // Initial fetch and 10-second polling for real-time updates across devices
-  useEffect(() => {
-    fetchRecordsFromSheets();
-    const interval = setInterval(fetchRecordsFromSheets, 10000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const handleSelectRole = (role) => {
-    setActiveRole(role);
-    if (role) {
-      localStorage.setItem('bis_user_role', role);
-    } else {
-      localStorage.removeItem('bis_user_role');
-    }
-  };
-
-  // Submit new entry to Google Sheets
-  const handleAddRecord = async (e) => {
-    e.preventDefault();
-    if (!formData.studentName || !formData.section) return;
-
-    setIsSubmitting(true);
-    const newEntry = {
-      id: `TRD-${Math.floor(1000 + Math.random() * 9000)}`,
-      ...formData,
-      status: 'Recorded',
-    };
-
-    try {
-      // Optimistic state update
-      setRecords((prev) => [newEntry, ...prev]);
-
-      await fetch(SPREADSHEET_API_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newEntry),
-        mode: 'no-cors', // Required for Google Apps Script Web App redirects
-      });
-
-      setFormData({
+      const [formData, setFormData] = useState({
         studentId: '',
         studentName: '',
         gradeLevel: 'Grade 7',
@@ -122,232 +45,277 @@ export default function App() {
         notes: '',
       });
 
-      // Refresh data from spreadsheet
-      setTimeout(fetchRecordsFromSheets, 1500);
-      setActiveTab('records');
-    } catch (error) {
-      console.error('Error posting record:', error);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+      const fetchRecordsFromSheets = async () => {
+        try {
+          const response = await fetch(SPREADSHEET_API_URL);
+          if (response.ok) {
+            const data = await response.json();
+            if (Array.isArray(data)) setRecords(data);
+          }
+        } catch (error) {
+          console.error('Failed to sync:', error);
+        } finally {
+          setLoading(false);
+        }
+      };
 
-  const filteredRecords = useMemo(() => {
-    return records.filter((rec) => {
-      const matchesSearch =
-        (rec.studentName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (rec.studentId || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (rec.section || '').toLowerCase().includes(searchQuery.toLowerCase());
+      useEffect(() => {
+        fetchRecordsFromSheets();
+        const interval = setInterval(fetchRecordsFromSheets, 10000);
+        return () => clearInterval(interval);
+      }, []);
 
-      const matchesGrade = selectedGrade === 'All' || rec.gradeLevel === selectedGrade;
-      const matchesCategory = selectedCategory === 'All' || rec.reasonCategory === selectedCategory;
-      const matchesDate = !filterDate || rec.date === filterDate;
+      const handleSelectRole = (role) => {
+        setActiveRole(role);
+        if (role) localStorage.setItem('bis_user_role', role);
+        else localStorage.removeItem('bis_user_role');
+      };
 
-      return matchesSearch && matchesGrade && matchesCategory && matchesDate;
-    });
-  }, [records, searchQuery, selectedGrade, selectedCategory, filterDate]);
+      const handleAddRecord = async (e) => {
+        e.preventDefault();
+        if (!formData.studentName || !formData.section) return;
 
-  if (!activeRole) {
-    return (
-      <div className="min-h-screen bg-slate-900 text-white flex flex-col justify-center items-center p-6">
-        <div className="max-w-xl w-full text-center space-y-8">
-          <div className="space-y-3">
-            <h1 className="text-4xl font-bold text-blue-400">Baracayo Integrated School</h1>
-            <p className="text-xl text-slate-300">Tardiness Monitoring System</p>
-            <p className="text-sm text-slate-400">Real-time Cloud Spreadsheet Syncing Enabled</p>
-          </div>
+        setIsSubmitting(true);
+        const newEntry = {
+          id: `TRD-${Math.floor(1000 + Math.random() * 9000)}`,
+          ...formData,
+          status: 'Recorded',
+        };
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <button
-              onClick={() => handleSelectRole('gate_scanner')}
-              className="p-6 bg-slate-800 border border-slate-700 hover:border-blue-500 rounded-xl space-y-3 transition"
-            >
-              <div className="text-2xl">📋</div>
-              <span className="font-semibold text-lg block">Gate Scanner Mode</span>
-              <span className="text-xs text-slate-400">Quick student entry logging</span>
-            </button>
+        try {
+          setRecords((prev) => [newEntry, ...prev]);
 
-            <button
-              onClick={() => handleSelectRole('admin')}
-              className="p-6 bg-slate-800 border border-slate-700 hover:border-emerald-500 rounded-xl space-y-3 transition"
-            >
-              <div className="text-2xl">📊</div>
-              <span className="font-semibold text-lg block">Central Admin Portal</span>
-              <span className="text-xs text-slate-400">View real-time synced logs</span>
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+          await fetch(SPREADSHEET_API_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(newEntry),
+            mode: 'no-cors',
+          });
 
-  return (
-    <div className="min-h-screen bg-slate-50 flex flex-col font-sans">
-      <header className="bg-slate-900 text-white p-4 shadow-md flex justify-between items-center">
-        <div>
-          <h1 className="font-bold text-base">Baracayo Integrated School</h1>
-          <p className="text-xs text-slate-400">
-            {activeRole === 'admin' ? 'Central Admin Portal' : 'Gate Terminal Scanner'}
-          </p>
-        </div>
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={fetchRecordsFromSheets}
-            className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-md font-medium"
-          >
-            🔄 Sync Now
-          </button>
-          <button
-            onClick={() => handleSelectRole(null)}
-            className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-3 py-1.5 rounded-md"
-          >
-            Switch Role
-          </button>
-        </div>
-      </header>
+          setFormData({
+            studentId: '',
+            studentName: '',
+            gradeLevel: 'Grade 7',
+            section: '',
+            date: new Date().toISOString().split('T')[0],
+            arrivalTime: '07:30 AM',
+            reasonCategory: 'Transportation',
+            notes: '',
+          });
 
-      <div className="max-w-7xl mx-auto w-full p-6 space-y-6">
-        {activeRole === 'admin' && (
-          <div className="flex space-x-2 border-b border-slate-200 pb-2">
-            <button
-              onClick={() => setActiveTab('dashboard')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold ${
-                activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'text-slate-600'
-              }`}
-            >
-              Overview
-            </button>
-            <button
-              onClick={() => setActiveTab('records')}
-              className={`px-4 py-2 rounded-lg text-sm font-semibold ${
-                activeTab === 'records' ? 'bg-blue-600 text-white' : 'text-slate-600'
-              }`}
-            >
-              Live Records ({records.length})
-            </button>
-          </div>
-        )}
+          setTimeout(fetchRecordsFromSheets, 1500);
+          setActiveTab('records');
+        } catch (error) {
+          console.error('Error posting record:', error);
+        } finally {
+          setIsSubmitting(false);
+        }
+      };
 
-        {/* Form View for Gate Scanner or Admin 'Add' */}
-        {(activeRole === 'gate_scanner' || activeTab === 'add') && (
-          <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm max-w-xl mx-auto space-y-4">
-            <h2 className="text-lg font-bold text-slate-800">Record Tardy Student</h2>
-            <form onSubmit={handleAddRecord} className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  type="text"
-                  required
-                  placeholder="Student ID"
-                  value={formData.studentId}
-                  onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
-                  className="border p-2 rounded text-sm w-full"
-                />
-                <input
-                  type="text"
-                  required
-                  placeholder="Student Full Name"
-                  value={formData.studentName}
-                  onChange={(e) => setFormData({ ...formData, studentName: e.target.value })}
-                  className="border p-2 rounded text-sm w-full"
-                />
+      if (!activeRole) {
+        return (
+          <div className="min-h-screen bg-slate-900 text-white flex flex-col justify-center items-center p-6">
+            <div className="max-w-xl w-full text-center space-y-8">
+              <div className="space-y-3">
+                <h1 className="text-4xl font-bold text-blue-400">Baracayo Integrated School</h1>
+                <p className="text-xl text-slate-300">Tardiness Monitoring System</p>
+                <p className="text-sm text-slate-400">Real-time Cloud Spreadsheet Syncing Enabled</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <select
-                  value={formData.gradeLevel}
-                  onChange={(e) => setFormData({ ...formData, gradeLevel: e.target.value })}
-                  className="border p-2 rounded text-sm w-full"
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <button
+                  onClick={() => handleSelectRole('gate_scanner')}
+                  className="p-6 bg-slate-800 border border-slate-700 hover:border-blue-500 rounded-xl space-y-3 transition"
                 >
-                  {GRADE_LEVELS.map((g) => (
-                    <option key={g} value={g}>{g}</option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  required
-                  placeholder="Section"
-                  value={formData.section}
-                  onChange={(e) => setFormData({ ...formData, section: e.target.value })}
-                  className="border p-2 rounded text-sm w-full"
-                />
-              </div>
+                  <div className="text-2xl">📋</div>
+                  <span className="font-semibold text-lg block">Gate Scanner Mode</span>
+                  <span className="text-xs text-slate-400">Quick student entry logging</span>
+                </button>
 
-              <div className="grid grid-cols-2 gap-4">
-                <input
-                  type="text"
-                  value={formData.arrivalTime}
-                  onChange={(e) => setFormData({ ...formData, arrivalTime: e.target.value })}
-                  className="border p-2 rounded text-sm w-full"
-                />
-                <select
-                  value={formData.reasonCategory}
-                  onChange={(e) => setFormData({ ...formData, reasonCategory: e.target.value })}
-                  className="border p-2 rounded text-sm w-full"
+                <button
+                  onClick={() => handleSelectRole('admin')}
+                  className="p-6 bg-slate-800 border border-slate-700 hover:border-emerald-500 rounded-xl space-y-3 transition"
                 >
-                  {REASON_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                  <div className="text-2xl">📊</div>
+                  <span className="font-semibold text-lg block">Central Admin Portal</span>
+                  <span className="text-xs text-slate-400">View real-time synced logs</span>
+                </button>
               </div>
+            </div>
+          </div>
+        );
+      }
 
-              <textarea
-                placeholder="Notes / Specific Reason"
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                className="border p-2 rounded text-sm w-full"
-              />
-
+      return (
+        <div className="min-h-screen bg-slate-50 text-slate-800 flex flex-col">
+          <header className="bg-slate-900 text-white p-4 flex justify-between items-center shadow-md">
+            <div>
+              <h1 className="font-bold text-base">Baracayo Integrated School</h1>
+              <p className="text-xs text-slate-400">
+                {activeRole === 'admin' ? 'Central Admin Portal' : 'Gate Terminal Scanner'}
+              </p>
+            </div>
+            <div className="flex items-center space-x-3">
               <button
-                type="submit"
-                disabled={isSubmitting}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition"
+                onClick={fetchRecordsFromSheets}
+                className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 rounded-md font-medium"
               >
-                {isSubmitting ? 'Syncing to Google Sheets...' : 'Submit Entry'}
+                🔄 Sync Now
               </button>
-            </form>
-          </div>
-        )}
-
-        {/* Live Records View */}
-        {activeRole === 'admin' && activeTab === 'records' && (
-          <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
-            <div className="flex justify-between items-center">
-              <h2 className="text-lg font-bold text-slate-800">Synced Google Sheet Data</h2>
-              <span className="text-xs text-slate-400">
-                {loading ? 'Fetching sheet updates...' : `Total: ${filteredRecords.length} records`}
-              </span>
+              <button
+                onClick={() => handleSelectRole(null)}
+                className="bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs px-3 py-1.5 rounded-md"
+              >
+                Switch Role
+              </button>
             </div>
+          </header>
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm border-collapse">
-                <thead>
-                  <tr className="bg-slate-100 border-b">
-                    <th className="p-3">ID</th>
-                    <th className="p-3">Student Name</th>
-                    <th className="p-3">Grade & Section</th>
-                    <th className="p-3">Date</th>
-                    <th className="p-3">Time</th>
-                    <th className="p-3">Reason</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredRecords.map((item, idx) => (
-                    <tr key={item.id || idx}>
-                      <td className="p-3 font-mono text-xs">{item.id}</td>
-                      <td className="p-3 font-medium">{item.studentName}</td>
-                      <td className="p-3">{item.gradeLevel} - {item.section}</td>
-                      <td className="p-3">{item.date}</td>
-                      <td className="p-3">{item.arrivalTime}</td>
-                      <td className="p-3">{item.reasonCategory}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+          <div className="max-w-7xl mx-auto w-full p-6 space-y-6">
+            {activeRole === 'admin' && (
+              <div className="flex space-x-2 border-b border-slate-200 pb-2">
+                <button
+                  onClick={() => setActiveTab('dashboard')}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+                    activeTab === 'dashboard' ? 'bg-blue-600 text-white' : 'text-slate-600'
+                  }`}
+                >
+                  Overview
+                </button>
+                <button
+                  onClick={() => setActiveTab('records')}
+                  className={`px-4 py-2 rounded-lg text-sm font-semibold ${
+                    activeTab === 'records' ? 'bg-blue-600 text-white' : 'text-slate-600'
+                  }`}
+                >
+                  Live Records ({records.length})
+                </button>
+              </div>
+            )}
+
+            {(activeRole === 'gate_scanner' || activeTab === 'add') && (
+              <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm max-w-xl mx-auto space-y-4">
+                <h2 className="text-lg font-bold text-slate-800">Record Tardy Student</h2>
+                <form onSubmit={handleAddRecord} className="space-y-4">
+                  <div className="grid grid-cols-2 gap-4">
+                    <input
+                      type="text"
+                      required
+                      placeholder="Student ID"
+                      value={formData.studentId}
+                      onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
+                      className="border p-2 rounded text-sm w-full"
+                    />
+                    <input
+                      type="text"
+                      required
+                      placeholder="Student Full Name"
+                      value={formData.studentName}
+                      onChange={(e) => setFormData({ ...formData, studentName: e.target.value })}
+                      className="border p-2 rounded text-sm w-full"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <select
+                      value={formData.gradeLevel}
+                      onChange={(e) => setFormData({ ...formData, gradeLevel: e.target.value })}
+                      className="border p-2 rounded text-sm w-full"
+                    >
+                      {GRADE_LEVELS.map((g) => (
+                        <option key={g} value={g}>{g}</option>
+                      ))}
+                    </select>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Section"
+                      value={formData.section}
+                      onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+                      className="border p-2 rounded text-sm w-full"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <input
+                      type="text"
+                      value={formData.arrivalTime}
+                      onChange={(e) => setFormData({ ...formData, arrivalTime: e.target.value })}
+                      className="border p-2 rounded text-sm w-full"
+                    />
+                    <select
+                      value={formData.reasonCategory}
+                      onChange={(e) => setFormData({ ...formData, reasonCategory: e.target.value })}
+                      className="border p-2 rounded text-sm w-full"
+                    >
+                      {REASON_CATEGORIES.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <textarea
+                    placeholder="Notes / Specific Reason"
+                    value={formData.notes}
+                    onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                    className="border p-2 rounded text-sm w-full"
+                  />
+
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg transition"
+                  >
+                    {isSubmitting ? 'Syncing to Google Sheets...' : 'Submit Entry'}
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {activeRole === 'admin' && activeTab === 'records' && (
+              <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
+                <div className="flex justify-between items-center">
+                  <h2 className="text-lg font-bold text-slate-800">Synced Google Sheet Data</h2>
+                  <span className="text-xs text-slate-400">
+                    {loading ? 'Fetching updates...' : `Total: ${records.length} records`}
+                  </span>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-sm border-collapse">
+                    <thead>
+                      <tr className="bg-slate-100 border-b">
+                        <th className="p-3">ID</th>
+                        <th className="p-3">Student Name</th>
+                        <th className="p-3">Grade & Section</th>
+                        <th className="p-3">Date</th>
+                        <th className="p-3">Time</th>
+                        <th className="p-3">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {records.map((item, idx) => (
+                        <tr key={item.id || idx}>
+                          <td className="p-3 font-mono text-xs">{item.id}</td>
+                          <td className="p-3 font-medium">{item.studentName}</td>
+                          <td className="p-3">{item.gradeLevel} - {item.section}</td>
+                          <td className="p-3">{item.date}</td>
+                          <td className="p-3">{item.arrivalTime}</td>
+                          <td className="p-3">{item.reasonCategory}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
-                
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
